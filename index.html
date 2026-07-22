@@ -427,7 +427,15 @@ const selectAllBtn  = document.getElementById('selectAllBtn');
 const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
 const cancelSelectBtn = document.getElementById('cancelSelectBtn');
 
-function driveThumb(id, size){ return `${APPS_SCRIPT_URL}?fileId=${id}`; }
+async function fetchImageDataUrl(id){
+  try {
+    const res = await fetch(`${APPS_SCRIPT_URL}?fileId=${id}`);
+    const data = await res.json();
+    return (data && data.image) || null;
+  } catch (err){
+    return null;
+  }
+}
 
 pickBtn.addEventListener('click', () => fileInput.click());
 
@@ -580,7 +588,7 @@ function renderGallery(){
       + (selectedIds.has(id) ? ' selected' : '');
     tile.innerHTML = `
       <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
-      <img src="${driveThumb(id, 500)}" alt="Foto de ${escapeHtml(data.name || '')}" loading="lazy">
+      <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}" loading="lazy">
       <div class="tile-name">${escapeHtml(data.name || '')}</div>
     `;
     tile.addEventListener('click', () => {
@@ -591,6 +599,18 @@ function renderGallery(){
       }
     });
     masonryEl.appendChild(tile);
+
+    const imgEl = tile.querySelector('img');
+    if (data.dataUrl){
+      imgEl.src = data.dataUrl;
+    } else {
+      fetchImageDataUrl(id).then(url => {
+        if (!url) return;
+        data.dataUrl = url; // se guarda en la propia entrada de la caché
+        const stillThere = masonryEl.querySelector(`img[data-photo-id="${id}"]`);
+        if (stillThere) stillThere.src = url;
+      });
+    }
   }
 }
 
@@ -666,9 +686,16 @@ const lightboxImg = document.getElementById('lightboxImg');
 const lightboxCaption = document.getElementById('lightboxCaption');
 
 function openLightbox(id, data){
-  lightboxImg.src = driveThumb(id, 1600);
   lightboxCaption.textContent = data.name ? `Compartida por ${data.name}` : '';
   lightbox.classList.add('open');
+  if (data.dataUrl){
+    lightboxImg.src = data.dataUrl;
+  } else {
+    lightboxImg.src = '';
+    fetchImageDataUrl(id).then(url => {
+      if (url){ data.dataUrl = url; lightboxImg.src = url; }
+    });
+  }
 }
 document.getElementById('lightboxClose').addEventListener('click', () => lightbox.classList.remove('open'));
 lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.remove('open'); });
