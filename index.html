@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 
   /* ---------- Tokens ---------- */
@@ -674,26 +675,68 @@ selectAllBtn.addEventListener('click', () => {
   renderGallery();
 });
 
-downloadSelectedBtn.addEventListener('click', () => {
+downloadSelectedBtn.addEventListener('click', async () => {
   if (!selectedIds.size){
     setStatus('Selecciona al menos una foto para descargar.', true);
     return;
   }
   const ids = Array.from(selectedIds);
-  setStatus(`Descargando ${ids.length} foto${ids.length>1?'s':''}... si tu navegador pregunta si permites varias descargas, acepta.`);
+  const originalText = downloadSelectedBtn.textContent;
+  downloadSelectedBtn.disabled = true;
+  downloadSelectedBtn.textContent = 'Preparando descarga...';
+  setStatus('Preparando la descarga, un momento...');
 
-  ids.forEach((id, i) => {
-    setTimeout(() => {
-      const a = document.createElement('a');
-      a.href = `https://drive.google.com/uc?export=download&id=${id}`;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }, i * 500);
-  });
+  const items = [];
+  for (const id of ids){
+    const entry = cache.get(id);
+    let dataUrl = entry && entry.dataUrl;
+    if (!dataUrl) dataUrl = await fetchImageDataUrl(id);
+    if (dataUrl) items.push({ dataUrl, name: (entry && entry.name) || 'foto' });
+  }
+
+  if (!items.length){
+    setStatus('No se pudieron preparar las fotos seleccionadas.', true);
+    downloadSelectedBtn.textContent = originalText;
+    downloadSelectedBtn.disabled = false;
+    return;
+  }
+
+  try {
+    if (items.length === 1){
+      const base64 = items[0].dataUrl.split(',')[1];
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      triggerDownload(new Blob([bytes], { type: 'image/jpeg' }), 'foto-boda.jpg');
+    } else {
+      const zip = new JSZip();
+      items.forEach((item, i) => {
+        const base64 = item.dataUrl.split(',')[1];
+        const safeName = (item.name || 'invitado').replace(/[^a-z0-9]+/gi, '_').slice(0, 24);
+        zip.file(`${String(i + 1).padStart(3, '0')}_${safeName}.jpg`, base64, { base64: true });
+      });
+      const blob = await zip.generateAsync({ type: 'blob' });
+      triggerDownload(blob, 'fotos-boda.zip');
+    }
+    setStatus(`Descarga lista: ${items.length} foto${items.length > 1 ? 's' : ''}.`);
+  } catch (err){
+    setStatus('No se pudo generar la descarga.', true);
+  }
+
+  downloadSelectedBtn.textContent = originalText;
+  downloadSelectedBtn.disabled = false;
 });
+
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /* ---------------------------------------------------------
    Lightbox
