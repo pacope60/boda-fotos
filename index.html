@@ -221,6 +221,58 @@
   }
   .tile.fresh{ box-shadow:0 0 0 3px var(--gold), 0 3px 10px rgba(42,38,34,0.08); }
 
+  .select-row{
+    display:flex;
+    justify-content:flex-end;
+    margin-bottom:14px;
+  }
+
+  .select-toolbar{
+    position:sticky;
+    top:0;
+    z-index:20;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--paper);
+    border:1.5px solid var(--line);
+    border-radius:14px;
+    padding:10px 14px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+  .select-count{
+    font-size:13px;
+    color:var(--ink-soft);
+    font-weight:600;
+  }
+  .select-toolbar-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .select-toolbar-actions .btn{ padding:9px 16px; font-size:13.5px; }
+
+  .tile-check{
+    position:absolute;
+    top:8px; left:8px;
+    width:24px; height:24px;
+    border-radius:50%;
+    background:rgba(255,255,255,0.85);
+    border:1.5px solid rgba(42,38,34,0.35);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    font-size:14px;
+    color:var(--wine);
+    font-weight:700;
+  }
+  .masonry.selecting .tile-check{ display:flex; }
+  .masonry.selecting .tile{ cursor:pointer; }
+  .tile.selected{ box-shadow:0 0 0 3px var(--wine), 0 3px 10px rgba(42,38,34,0.08); }
+  .tile.selected .tile-check{ background:var(--wine); color:#fff; border-color:var(--wine); }
+
   @keyframes tileIn{
     to{ opacity:1; transform:scale(1); }
   }
@@ -311,6 +363,19 @@
   </div>
   <p class="gallery-note">Todo lo que subís vosotros y el resto de invitados aparece aquí para todos.</p>
 
+  <div class="select-row">
+    <button class="btn btn-ghost" id="selectModeBtn">Seleccionar fotos</button>
+  </div>
+
+  <div class="select-toolbar" id="selectToolbar" style="display:none;">
+    <span class="select-count" id="selectCount">0 seleccionadas</span>
+    <div class="select-toolbar-actions">
+      <button class="btn btn-ghost" id="selectAllBtn">Todas</button>
+      <button class="btn btn-primary" id="downloadSelectedBtn">Descargar</button>
+      <button class="btn btn-ghost" id="cancelSelectBtn">Cancelar</button>
+    </div>
+  </div>
+
   <div id="galleryWrap">
     <div class="empty-state" id="emptyState">Aún no hay fotos. ¡Sé el primero en compartir una!</div>
     <div class="masonry" id="masonry" style="display:none;"></div>
@@ -345,6 +410,8 @@ document.getElementById('weddingDate').textContent = WEDDING_DATE;
    ========================================================= */
 const cache = new Map(); // id -> {name, ts}
 let justUploadedIds = new Set();
+let selectionMode = false;
+let selectedIds = new Set();
 
 const pickBtn      = document.getElementById('pickBtn');
 const fileInput     = document.getElementById('fileInput');
@@ -353,6 +420,12 @@ const statusMsg     = document.getElementById('statusMsg');
 const masonryEl     = document.getElementById('masonry');
 const emptyStateEl  = document.getElementById('emptyState');
 const galleryCountEl= document.getElementById('galleryCount');
+const selectModeBtn = document.getElementById('selectModeBtn');
+const selectToolbar = document.getElementById('selectToolbar');
+const selectCountEl = document.getElementById('selectCount');
+const selectAllBtn  = document.getElementById('selectAllBtn');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
+const cancelSelectBtn = document.getElementById('cancelSelectBtn');
 
 function driveThumb(id, size){ return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`; }
 
@@ -498,14 +571,25 @@ function renderGallery(){
   masonryEl.style.display = 'block';
   masonryEl.innerHTML = '';
 
+  masonryEl.classList.toggle('selecting', selectionMode);
+
   for (const [id, data] of entries){
     const tile = document.createElement('div');
-    tile.className = 'tile' + (justUploadedIds.has(id) ? ' fresh' : '');
+    tile.className = 'tile'
+      + (justUploadedIds.has(id) ? ' fresh' : '')
+      + (selectedIds.has(id) ? ' selected' : '');
     tile.innerHTML = `
+      <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
       <img src="${driveThumb(id, 500)}" alt="Foto de ${escapeHtml(data.name || '')}" loading="lazy">
       <div class="tile-name">${escapeHtml(data.name || '')}</div>
     `;
-    tile.addEventListener('click', () => openLightbox(id, data));
+    tile.addEventListener('click', () => {
+      if (selectionMode){
+        toggleSelection(id);
+      } else {
+        openLightbox(id, data);
+      }
+    });
     masonryEl.appendChild(tile);
   }
 }
@@ -515,6 +599,64 @@ function escapeHtml(str){
   div.textContent = str;
   return div.innerHTML;
 }
+
+/* ---------------------------------------------------------
+   Selección múltiple y descarga
+   --------------------------------------------------------- */
+function toggleSelection(id){
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  updateSelectToolbar();
+  renderGallery();
+}
+
+function updateSelectToolbar(){
+  selectCountEl.textContent = `${selectedIds.size} seleccionada${selectedIds.size === 1 ? '' : 's'}`;
+}
+
+selectModeBtn.addEventListener('click', () => {
+  selectionMode = true;
+  selectedIds.clear();
+  selectModeBtn.style.display = 'none';
+  selectToolbar.style.display = 'flex';
+  updateSelectToolbar();
+  renderGallery();
+});
+
+cancelSelectBtn.addEventListener('click', () => {
+  selectionMode = false;
+  selectedIds.clear();
+  selectModeBtn.style.display = 'inline-block';
+  selectToolbar.style.display = 'none';
+  renderGallery();
+});
+
+selectAllBtn.addEventListener('click', () => {
+  for (const id of cache.keys()) selectedIds.add(id);
+  updateSelectToolbar();
+  renderGallery();
+});
+
+downloadSelectedBtn.addEventListener('click', () => {
+  if (!selectedIds.size){
+    setStatus('Selecciona al menos una foto para descargar.', true);
+    return;
+  }
+  const ids = Array.from(selectedIds);
+  setStatus(`Descargando ${ids.length} foto${ids.length>1?'s':''}... si tu navegador pregunta si permites varias descargas, acepta.`);
+
+  ids.forEach((id, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = `https://drive.google.com/uc?export=download&id=${id}`;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i * 500);
+  });
+});
 
 /* ---------------------------------------------------------
    Lightbox
