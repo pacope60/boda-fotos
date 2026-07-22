@@ -427,7 +427,7 @@ const selectAllBtn  = document.getElementById('selectAllBtn');
 const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
 const cancelSelectBtn = document.getElementById('cancelSelectBtn');
 
-function driveThumb(id, size){ return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`; }
+function driveThumb(id, size){ return `${APPS_SCRIPT_URL}?fileId=${id}`; }
 
 pickBtn.addEventListener('click', () => fileInput.click());
 
