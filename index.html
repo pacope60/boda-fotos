@@ -593,7 +593,7 @@ function renderGallery(){
       + (selectedIds.has(id) ? ' selected' : '');
     tile.innerHTML = `
       <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
-      <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}" loading="lazy">
+      <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}">
       <div class="tile-name">${escapeHtml(data.name || '')}</div>
     `;
     tile.addEventListener('click', () => {
