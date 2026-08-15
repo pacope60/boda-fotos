@@ -277,6 +277,27 @@
   .tile.selected{ box-shadow:0 0 0 3px var(--wine), 0 3px 10px rgba(42,38,34,0.08); }
   .tile.selected .tile-check{ background:var(--wine); color:#fff; border-color:var(--wine); }
 
+  .video-placeholder{
+    width:100%;
+    aspect-ratio: 1 / 1;
+    background:linear-gradient(135deg, var(--sage), var(--wine-dark));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .video-placeholder::after{
+    content:"▶";
+    color:#fff;
+    font-size:22px;
+    width:52px; height:52px;
+    background:rgba(0,0,0,0.35);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding-left:4px;
+  }
+
   @keyframes tileIn{
     to{ opacity:1; transform:scale(1); }
   }
@@ -354,8 +375,8 @@
       <div class="name-field">
         <input type="text" id="guestName" placeholder="Tu nombre (opcional)" autocomplete="name">
       </div>
-      <button class="btn btn-primary" id="pickBtn">Compartir tus fotos</button>
-      <input type="file" id="fileInput" accept="image/*" multiple>
+      <button class="btn btn-primary" id="pickBtn">Compartir fotos y vídeos</button>
+      <input type="file" id="fileInput" accept="image/*,video/*" multiple>
     </div>
 
     <div class="status" id="statusMsg"></div>
@@ -392,6 +413,7 @@
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightboxClose">&times;</button>
   <img id="lightboxImg" src="" alt="">
+  <video id="lightboxVideo" controls playsinline style="display:none; max-width:100%; max-height:82vh; border-radius:10px;"></video>
   <div class="lightbox-caption" id="lightboxCaption"></div>
 </div>
 
@@ -492,6 +514,17 @@ function compressImage(file, maxDim = 1600, quality = 0.72){
 /* ---------------------------------------------------------
    Subida
    --------------------------------------------------------- */
+const MAX_VIDEO_MB = 60;
+
+function readFileAsDataUrl(file){
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 fileInput.addEventListener('change', async (e) => {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
@@ -505,9 +538,18 @@ fileInput.addEventListener('change', async (e) => {
   setStatus(`Subiendo 1 de ${files.length}...`);
 
   for (const file of files){
-    if (!file.type.startsWith('image/')){ processed++; skipped++; continue; }
+    const isVideo = file.type.startsWith('video/');
+    const isImage = file.type.startsWith('image/');
+    if (!isVideo && !isImage){ processed++; skipped++; continue; }
 
-    const dataUrl = await compressImage(file);
+    if (isVideo && file.size > MAX_VIDEO_MB * 1024 * 1024){
+      setStatus(`El vídeo "${file.name}" pesa más de ${MAX_VIDEO_MB} MB y se ha omitido. Prueba con uno más corto.`, true);
+      skipped++;
+      processed++;
+      continue;
+    }
+
+    const dataUrl = isVideo ? await readFileAsDataUrl(file) : await compressImage(file);
     if (!dataUrl){
       skipped++;
       processed++;
@@ -521,7 +563,7 @@ fileInput.addEventListener('change', async (e) => {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ imageBase64: dataUrl, name: guestName })
+        body: JSON.stringify({ imageBase64: dataUrl, name: guestName, mimeType: file.type })
       });
     } catch (err){
       skipped++;
@@ -566,7 +608,7 @@ async function loadNewPhotos(){
     const data = await res.json();
     const photos = (data && data.photos) || [];
     for (const p of photos){
-      if (!cache.has(p.id)) cache.set(p.id, { name: p.name, ts: p.ts });
+      if (!cache.has(p.id)) cache.set(p.id, { name: p.name, ts: p.ts, mimeType: p.mimeType });
     }
   } catch (err){
     // si falla la red, simplemente no actualizamos esta vez
@@ -591,15 +633,26 @@ function renderGallery(){
   masonryEl.classList.toggle('selecting', selectionMode);
 
   for (const [id, data] of entries){
+    const isVideo = (data.mimeType || '').startsWith('video/');
     const tile = document.createElement('div');
     tile.className = 'tile'
       + (justUploadedIds.has(id) ? ' fresh' : '')
       + (selectedIds.has(id) ? ' selected' : '');
-    tile.innerHTML = `
-      <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
-      <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}">
-      <div class="tile-name">${escapeHtml(data.name || '')}</div>
-    `;
+
+    if (isVideo){
+      tile.innerHTML = `
+        <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
+        <div class="video-placeholder"></div>
+        <div class="tile-name">${escapeHtml(data.name || '')}</div>
+      `;
+    } else {
+      tile.innerHTML = `
+        <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
+        <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}">
+        <div class="tile-name">${escapeHtml(data.name || '')}</div>
+      `;
+    }
+
     tile.addEventListener('click', () => {
       if (selectionMode){
         toggleSelection(id);
@@ -608,6 +661,8 @@ function renderGallery(){
       }
     });
     masonryEl.appendChild(tile);
+
+    if (isVideo) continue; // el vídeo no se carga hasta que se abre en el visor
 
     const imgEl = tile.querySelector('img');
     if (data.dataUrl){
@@ -691,7 +746,11 @@ downloadSelectedBtn.addEventListener('click', async () => {
     const entry = cache.get(id);
     let dataUrl = entry && entry.dataUrl;
     if (!dataUrl) dataUrl = await fetchImageDataUrl(id);
-    if (dataUrl) items.push({ dataUrl, name: (entry && entry.name) || 'foto' });
+    if (dataUrl) items.push({
+      dataUrl,
+      name: (entry && entry.name) || 'archivo',
+      mimeType: (entry && entry.mimeType) || 'image/jpeg'
+    });
   }
 
   if (!items.length){
@@ -701,24 +760,29 @@ downloadSelectedBtn.addEventListener('click', async () => {
     return;
   }
 
+  const extFor = (mime) => ({
+    'image/jpeg':'jpg', 'image/png':'png', 'image/heic':'heic',
+    'video/mp4':'mp4', 'video/quicktime':'mov', 'video/webm':'webm'
+  }[mime] || 'dat');
+
   try {
     if (items.length === 1){
       const base64 = items[0].dataUrl.split(',')[1];
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      triggerDownload(new Blob([bytes], { type: 'image/jpeg' }), 'foto-boda.jpg');
+      triggerDownload(new Blob([bytes], { type: items[0].mimeType }), 'archivo-boda.' + extFor(items[0].mimeType));
     } else {
       const zip = new JSZip();
       items.forEach((item, i) => {
         const base64 = item.dataUrl.split(',')[1];
         const safeName = (item.name || 'invitado').replace(/[^a-z0-9]+/gi, '_').slice(0, 24);
-        zip.file(`${String(i + 1).padStart(3, '0')}_${safeName}.jpg`, base64, { base64: true });
+        zip.file(`${String(i + 1).padStart(3, '0')}_${safeName}.${extFor(item.mimeType)}`, base64, { base64: true });
       });
       const blob = await zip.generateAsync({ type: 'blob' });
       triggerDownload(blob, 'fotos-boda.zip');
     }
-    setStatus(`Descarga lista: ${items.length} foto${items.length > 1 ? 's' : ''}.`);
+    setStatus(`Descarga lista: ${items.length} archivo${items.length > 1 ? 's' : ''}.`);
   } catch (err){
     setStatus('No se pudo generar la descarga.', true);
   }
@@ -743,11 +807,31 @@ function triggerDownload(blob, filename){
    --------------------------------------------------------- */
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightboxImg');
+const lightboxVideo = document.getElementById('lightboxVideo');
 const lightboxCaption = document.getElementById('lightboxCaption');
 
 function openLightbox(id, data){
   lightboxCaption.textContent = data.name ? `Compartida por ${data.name}` : '';
   lightbox.classList.add('open');
+
+  const isVideo = (data.mimeType || '').startsWith('video/');
+  lightboxImg.style.display = isVideo ? 'none' : 'block';
+  lightboxVideo.style.display = isVideo ? 'block' : 'none';
+
+  if (isVideo){
+    lightboxVideo.pause();
+    if (data.dataUrl){
+      lightboxVideo.src = data.dataUrl;
+    } else {
+      lightboxVideo.removeAttribute('src');
+      fetchImageDataUrl(id).then(url => {
+        if (url){ data.dataUrl = url; lightboxVideo.src = url; }
+        else setStatus('No se pudo cargar el vídeo.', true);
+      });
+    }
+    return;
+  }
+
   if (data.dataUrl){
     lightboxImg.src = data.dataUrl;
   } else {
@@ -757,8 +841,8 @@ function openLightbox(id, data){
     });
   }
 }
-document.getElementById('lightboxClose').addEventListener('click', () => lightbox.classList.remove('open'));
-lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.remove('open'); });
+document.getElementById('lightboxClose').addEventListener('click', () => { lightbox.classList.remove('open'); lightboxVideo.pause(); });
+lightbox.addEventListener('click', (e) => { if (e.target === lightbox){ lightbox.classList.remove('open'); lightboxVideo.pause(); } });
 
 /* ---------------------------------------------------------
    Arranque + actualización periódica
