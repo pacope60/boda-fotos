@@ -218,10 +218,20 @@
   }
   .tile .tile-name{
     position:absolute; left:0; right:0; bottom:0;
-    padding:6px 8px 5px;
-    font-size:11px;
+    padding:10px 8px 8px;
+    text-align:center;
+    background:linear-gradient(to top, rgba(0,0,0,0.68), rgba(0,0,0,0));
+  }
+  .tile .tile-name .overlay-name{
+    font-size:13.5px;
+    font-weight:600;
     color:#fff;
-    background:linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0));
+    line-height:1.3;
+  }
+  .tile .tile-name .overlay-date{
+    font-size:11.5px;
+    color:rgba(255,255,255,0.85);
+    margin-top:2px;
   }
   .tile.fresh{ box-shadow:0 0 0 3px var(--gold), 0 3px 10px rgba(42,38,34,0.08); }
 
@@ -289,19 +299,21 @@
   .video-info{
     position:absolute;
     left:0; right:0; bottom:0;
-    padding:8px 10px 7px;
+    padding:10px 8px 8px;
+    text-align:center;
     background:linear-gradient(to top, rgba(0,0,0,0.68), rgba(0,0,0,0));
   }
   .video-guest{
     color:#fff;
     font-weight:600;
-    font-size:12px;
+    font-size:13.5px;
     line-height:1.3;
     word-break:break-word;
   }
   .video-datetime{
     color:rgba(255,255,255,0.85);
-    font-size:10.5px;
+    font-size:11.5px;
+    margin-top:2px;
   }
 
   @keyframes tileIn{
@@ -661,7 +673,10 @@ function renderGallery(){
       tile.innerHTML = `
         <div class="tile-check">${selectedIds.has(id) ? '✓' : ''}</div>
         <img data-photo-id="${id}" alt="Foto de ${escapeHtml(data.name || '')}">
-        <div class="tile-name">${escapeHtml(data.name || '')}</div>
+        <div class="tile-name">
+          <div class="overlay-name">${escapeHtml(guestLabel)}</div>
+          <div class="overlay-date">${formatDateTime(data.ts)}</div>
+        </div>
       `;
     }
 
