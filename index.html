@@ -195,10 +195,11 @@
 
   .masonry{
     display:grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap:10px;
+    grid-template-columns: repeat(3, 1fr);
+    gap:8px;
   }
-  @media (min-width:480px){ .masonry{ grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width:480px){ .masonry{ grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width:720px){ .masonry{ grid-template-columns: repeat(5, 1fr); } }
 
   .tile{
     border-radius:12px;
@@ -281,6 +282,7 @@
     font-size:14px;
     color:var(--wine);
     font-weight:700;
+    z-index:5;
   }
   .masonry.selecting .tile-check{ display:flex; }
   .masonry.selecting .tile{ cursor:pointer; }
@@ -645,7 +647,7 @@ function renderGallery(){
   }
 
   emptyStateEl.style.display = 'none';
-  masonryEl.style.display = 'block';
+  masonryEl.style.display = 'grid';
   masonryEl.innerHTML = '';
 
   masonryEl.classList.toggle('selecting', selectionMode);
